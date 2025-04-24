@@ -165,19 +165,34 @@ function createMap(us, states_topo) {
        );
    }
 
+   // Keep track of currently selected state
+   let selectedState = null;
+
    function clicked(event, d) {
-       const [[x0, y0], [x1, y1]] = path.bounds(d);
        event.stopPropagation();
-       states.transition().style("fill", null);
-       d3.select(this).transition().style("fill", "red");
-       svg.transition().duration(750).call(
-          zoom.transform,
-          d3.zoomIdentity
-             .translate(width / 2, height / 2)
-             .scale(Math.min(8, 0.9 / Math.max((x1 - x0) / width, (y1 - y0) / height)))
-             .translate(-(x0 + x1) / 2, -(y0 + y1) / 2),
-          d3.pointer(event, svg.node())
-       );
+       
+       // Check if clicking on the already selected state
+       if (selectedState === this) {
+           // Clicking on already selected state - just revert to original color without zooming
+           d3.select(this).transition().style("fill", null);
+           selectedState = null;
+       } else {
+           // Clicking on a different state - reset previous selection and select new one
+           states.transition().style("fill", null);
+           d3.select(this).transition().style("fill", "red");
+           selectedState = this;
+           
+           // Only zoom when selecting a new state (not when unselecting)
+           const [[x0, y0], [x1, y1]] = path.bounds(d);
+           svg.transition().duration(750).call(
+              zoom.transform,
+              d3.zoomIdentity
+                 .translate(width / 2, height / 2)
+                 .scale(Math.min(8, 0.9 / Math.max((x1 - x0) / width, (y1 - y0) / height)))
+                 .translate(-(x0 + x1) / 2, -(y0 + y1) / 2),
+              d3.pointer(event, svg.node())
+           );
+       }
    }
 
    function zoomed(event) {

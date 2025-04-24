@@ -1,197 +1,161 @@
 console.log('D3 Version:', d3.version);
 
-// your script.js
-const margin = { top: 40, right: 40, bottom: 40, left: 60 };
-const width = 700
-const height = 700
+const width = 975;
+const height = 610; 
 
-const svg = d3.select('#vis')
-   .append('svg')
-   .attr('width', width)
-   .attr('height', height)
-   .append('g')
-    // we use a square canvas 
-   .attr('transform', `translate(${width / 2},${height / 2})`)
+// Asynchronous initialization function
+async function init() {
+   try {
+       // Load geographic (map) data
+       us = await d3.json("./data/states-albers-10m.json");
 
-svg.append('text')
-   .attr('x', 0)
-   .attr('y', -height / 2 + margin.top)
-   .text('new (old) covid-19 cases in the usa')
-   .style('fill', '#555555')
-   .style('font-size', 16) 
-   .style("font-weight", 600)
-   .style('text-anchor', 'middle')
-   .style('text-transform', 'uppercase')
+       // Load mortality data
+       let mortality_data = await d3.csv("./data/mortality_data.json");
+       
+       // Verify the loaded data in the console
+       console.log('Map data:', us);
+       console.log('Mortality data:', mortality_data);
+       
+       // Pass loaded data to visualization function
+       createVis(us, mortality_data);
+   } catch (error) {
+       // Catch and report errors clearly
+       console.error('Error loading data:', error);
+   }
 
-svg.append('text')
-   .attr('x',   0)
-   .attr('y',  -height / 2  + margin.top + 20)
-   .text('color picked for aesthethics and might not be truthful')
-   .style('fill', '#888888')
-   .style('font-size', 12) 
-   .style('text-anchor', 'middle')
-   .style("font-weight", 400)
+const zoom = d3.zoom()
+   .scaleExtent([1, 8])
+   .on("zoom", zoomed);
 
+const svg = d3.select("#vis").append("svg")
+   .attr("viewBox", [5, 5, width, height])
+   .attr("width", width)
+   .attr("height", height)
+   .attr("style", "max-width: 100%; height: auto;")
+   .on("click", reset);
 
-const spiralArc = (fromRadius, toRadius, width, fromAngle, toAngle) => {
-   const x1 = fromRadius * Math.sin(fromAngle);
-   const y1 = fromRadius * -Math.cos(fromAngle);
-   const x2 = (fromRadius + width) * Math.sin(fromAngle);
-   const y2 = (fromRadius + width) * -Math.cos(fromAngle);
-   const x3 = toRadius * Math.sin(toAngle);
-   const y3 = toRadius * -Math.cos(toAngle);
-   const x4 = (toRadius + width) * Math.sin(toAngle);
-   const y4 = (toRadius + width) * -Math.cos(toAngle);
-   return `
-     M ${x1},${y1} 
-     L ${x2},${y2} 
-     A ${fromRadius},${fromRadius} 1 0 1 ${x4},${y4} 
-     L ${x3},${y3}
-     A ${fromRadius},${fromRadius} 0 0 0 ${x1},${y1}`;
+// Create tooltip div if it doesn't exist
+if (!d3.select("#tooltip").node()) {
+  d3.select("body").append("div")
+    .attr("id", "tooltip")
+    .attr("class", "tooltip")
+    .style("opacity", 0);
+}
+
+const path = d3.geoPath();
+
+const g = svg.append("g");
+
+// Updated color scale: white → orange → red
+const colorScale = (x) => {
+   if (!x) return "#ccc"; // Gray for missing data
+   // Create a 3-point scale: white (low), orange (medium), red (high)
+   return d3.scaleLinear()
+     .domain([0, 50, 100]) // Adjust these thresholds as needed
+     .range(["white", "orange", "red"])(x["Age-adjusted Death Rate"]);
 };
 
-// The main function that builds the visualization
-// We pass the dataset as a parameter
-function createVis(data) {
-   const BASE_RADIUS = 30;  
-   const OFFSET = .25     
-   const angle = Math.PI * 2 / 365; 
+const states = g.append("g")
+   .attr("cursor", "pointer")
+   .selectAll("path")
+   .data(topojson.feature(us, us.objects.states).features)
+   .join("path")
+   .on("click", clicked)
+   .attr("d", path)
+   .attr("fill", d => colorScale(d.properties.state_info))
+   .on("mouseover", function(event, d) {
+      d3.select(this).attr("stroke", "black").attr("stroke-width", 1.5);
+      const [x, y] = d3.pointer(event, document.body);
+  
+      d3.select("#tooltip")
+      .style("display", 'block')
+      .html(`
+          <strong>${d.properties.state_info?.State || d.properties.name}</strong><br/>
+          ${d.properties.state_info?.["Cause Name"] || 'No data available'}<br/>
+          Deaths: ${d.properties.state_info?.Deaths?.toLocaleString() || 'N/A'}<br/>
+          Rate: ${d.properties.state_info?.["Age-adjusted Death Rate"]?.toFixed(1) || 'N/A'} per 100,000
+      `)
+      .style("left", `${x + 10}px`)
+      .style("top", `${y + 10}px`)
+      .style("opacity", 1);
+  })
+   .on("mouseout", function() {
+      d3.select(this).attr("stroke", null);
+      d3.select("#tooltip").style("opacity", 0);
+   })
+   .on("mousemove", function(event) {
+      const [x, y] = d3.pointer(event, document.body);
+      d3.select("#tooltip")
+         .style("left", `${x + 10}px`)
+         .style("top", `${y + 10}px`);
+   });
+ 
+states.append("title")
+   .text(d => d.properties.state_info?.state || d.properties.name);
 
-   let caseScale = d3.scaleLinear([1, d3.max(data.map(d => d.newConfirmed))], [1, 150])
-   let colorScale = d3.scaleSequential(d3.interpolateReds)
-    .domain([0, d3.max(data.map(d => d.newConfirmed))]);
-   const formatYear = d3.timeFormat("%Y")
-   const formatMonth = d3.timeFormat("%b")    // 'Jan', 'Feb', 'Mar', ...
+g.append("path")
+   .attr("fill", "none")
+   .attr("stroke", "white")
+   .attr("stroke-linejoin", "round")
+   .attr("d", path(topojson.mesh(us, us.objects.states, (a, b) => a !== b)));
 
-    // Add legend to top-right corner
-    const legend = svg.append('g')
-      .attr('class', 'legend')
-     .attr('transform', `translate(${width/2 - 120}, ${-height/2 + 40})`);  // Top-right position
+svg.call(zoom);
 
-    // Legend data - adjust these thresholds based on your data
-    const legendThresholds = [100000, 250000, 500000, 1000000];
-    
-    legend.append('text')
-      .attr('x', 0)
-      .attr('y', 0)
-      .text('Daily Cases')
-      .style('font-size', 12)
-      .style('font-weight', 500)
-      .style('fill', '#555');
-
-    const legendHeight = 100;
-    const legendWidth = 20;
-    
-    const defs = svg.append('defs');
-    const gradient = defs.append('linearGradient')
-      .attr('id', 'legend-gradient')
-      .attr('x1', '0%')
-      .attr('x2', '0%')
-      .attr('y1', '100%')  
-      .attr('y2', '0%');    
-
-    gradient.append('stop')
-      .attr('offset', '0%')
-      .attr('stop-color', colorScale(0));
-    gradient.append('stop')
-      .attr('offset', '100%')
-      .attr('stop-color', colorScale(d3.max(legendThresholds)));
-
-    legend.append('rect')
-      .attr('x', 0)
-      .attr('y', 20)
-      .attr('width', legendWidth)
-      .attr('height', legendHeight)
-      .style('fill', 'url(#legend-gradient)')
-      .style('stroke', '#999');
-
-    legend.selectAll('.legend-tick')
-      .data(legendThresholds)
-      .enter().append('g')
-      .attr('class', 'legend-tick')
-      .attr('transform', d => `translate(0, ${20 + legendHeight - (d/d3.max(legendThresholds)) * legendHeight})`)
-      .each(function(d) {
-         const g = d3.select(this);
-         // tick mark
-         g.append('line')
-            .attr('x1', legendWidth)
-            .attr('x2', legendWidth + 5)
-            .attr('stroke', '#000')
-            .attr('stroke-width', 1);
-            // label
-         g.append('text')
-            .attr('x', legendWidth + 10)
-            .attr('dy', '0.35em')
-            .text(d >= 1000000 ? `${d/1000000}M` : `${d/1000}K`)
-            .style('font-size', '10px')
-            .style('fill', '#333');
-      });
-
-   for (let index = 0; index < data.length; index++) {
-       const height = caseScale(data[index].newConfirmed)
-       const fromAngle = angle * index;
-       const toAngle = angle * (index + 1);
-       const fromRadius = toRadius = BASE_RADIUS +  OFFSET * index - height / 2;
-
-       if (data[index].date.getDate() === 12 && data[index].date.getMonth() === 0) {
-         let yearRadius = fromRadius
-         // Offset to align the first day in a month
-         let yearAngle = fromAngle - angle * 12  
-         svg.append('g')
-            .attr("transform", `translate(${Math.sin(yearAngle) * yearRadius}, 
-                               ${-Math.cos(yearAngle) * yearRadius})`)
-            .append("text")
-            .attr('dx', 0)
-            .attr('dy', 0)
-            .text(formatYear(data[index].date).toLowerCase())
-            .attr("font-weight", 550)
-            .attr("font-size", 10)
-            .style('text-transform', 'small-caps')
-            .style('fill', 'black')
-            .style('text-anchor', 'middle')
-            .attr('class', 'labels')
-      }       
-
-      if (data[index].date.getDate() === 1){
-         const currentDate = data[index].date;
-         const currentYear = currentDate.getFullYear();
-         const currentMonth = currentDate.getMonth();
-         // Check if date is between Oct 2021 and Sep 2022
-         if ((currentYear === 2021 && currentMonth >= 9) || (currentYear === 2022 && currentMonth <= 8)) {
-            let textRadius = fromRadius + 30 // A magic number - feel free to improve!
-            svg.append('text')
-               .attr("transform", `translate(${Math.sin(fromAngle) * textRadius}, 
-                  ${-Math.cos(fromAngle) * textRadius})`)
-               .text(formatMonth(data[index].date).toLowerCase())
-               .attr("font-weight", 550)
-               .attr("font-size", 14)
-               .style('font-variant', 'small-caps')
-               .style('fill', 'black')
-               .style('text-anchor', 'middle')
-               .attr('class', 'labels')
-         }
-      }  
-
-       const path = spiralArc (fromRadius, toRadius, height, fromAngle, toAngle);
-       const color = colorScale(data[index].newConfirmed)
-       svg.append('path')
-           .attr('d', path)
-           .style('fill', color)
-   }
+function reset() {
+   states.transition().style("fill", null);
+   svg.transition().duration(750).call(
+      zoom.transform,
+      d3.zoomIdentity,
+      d3.zoomTransform(svg.node()).invert([width / 2, height / 2])
+   );
 }
-// Load the data
-function init() {
-   d3.csv("data/COVID_US_cases.csv", d => ({
-       // JavaScript's Date object stores time in UTC internally.
-       // We add a time zone offset to avoid potential issues.
-       date: new Date(d.date + 'T12:00:00.000+08:00'),  
-       // Convert confirmed cases to numbers; assume 0 if missing (NA)
-       newConfirmed: +d.new_confirmed > 0 ? +d.new_confirmed : 0  
-   })).then(data => {
-       console.log(data); // Check if data loads correctly
-       createVis(data)
+
+function clicked(event, d) {
+   const [[x0, y0], [x1, y1]] = path.bounds(d);
+   event.stopPropagation();
+   states.transition().style("fill", null);
+   d3.select(this).transition().style("fill", "red");
+   svg.transition().duration(750).call(
+      zoom.transform,
+      d3.zoomIdentity
+         .translate(width / 2, height / 2)
+         .scale(Math.min(8, 0.9 / Math.max((x1 - x0) / width, (y1 - y0) / height)))
+         .translate(-(x0 + x1) / 2, -(y0 + y1) / 2),
+      d3.pointer(event, svg.node())
+   );
+}
+
+function zoomed(event) {
+   const {transform} = event;
+   g.attr("transform", transform);
+   g.attr("stroke-width", 1 / transform.k);
+}
+return svg.node();  
+}
+
+// Function to create our visualization
+function createVis(us, mortality_data) {
+   let states_topo = topojson.feature(us, us.objects.states);
+   console.log(states_topo);
+
+   // Create a map of state names to data for easier lookup
+   const stateDataMap = {};
+   mortality_data.forEach(d => {
+       stateDataMap[d.state] = d;
+   });
+
+   states_topo.features.forEach(s => {
+       // Match by state name instead of ID
+       const stateName = s.properties.name;
+       if (stateDataMap[stateName]) {
+           s.properties.state_info = stateDataMap[stateName];
+       }
+       // Special case for District of Columbia if needed
+       else if (stateName === "District of Columbia" && stateDataMap["Washington DC"]) {
+           s.properties.state_info = stateDataMap["Washington DC"];
+       }
    });
 }
 
-// Run `init()` when the page loads
+// Trigger data loading and visualization when the window loads
 window.addEventListener('load', init);

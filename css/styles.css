@@ -6,16 +6,47 @@
     line-height: 1.8;
 }
 
-/* Container styling for layout */
+/* Update your container styles */
 .container {
     max-width: 800px;
+    width: 100%; /* Add this */
     margin: 2rem auto;
-    font-family: Arial, sans-serif;
+    padding: 0 15px; /* Ensure consistent padding */
+    overflow: hidden; /* Contain all child elements */
 }
 
-#vis svg {
-    margin: 2rem 0;
-    border: 1px solid #ccc; /*otherwise you can't see this part*/
+/* Add these new rules to your existing CSS */
+.slider-container {
+    width: calc(100% - 30px); /* Account for padding */
+    max-width: 770px; /* 800px - 30px padding */
+    margin: 20px auto 50px auto;
+    padding: 20px;
+    background: #f8f8f8;
+    border-radius: 8px;
+    position: relative;
+    overflow: visible; /* Only for this container */
+    box-sizing: border-box;
+}
+
+.slider-container svg {
+    display: block;
+    margin: 10px auto 0 auto;
+}
+
+.slider-label {
+    font-size: 14px;
+    font-weight: bold;
+    margin-bottom: 10px;
+    color: #333;
+}
+
+#vis1 {
+    margin-top: 20px;
+}
+
+#vis1 svg {
+    margin: 0 auto; /* Center the visualization */
+    border: 1px solid #ccc;
 }
 
 .x-axis path,

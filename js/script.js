@@ -1,81 +1,178 @@
 console.log('D3 Version:', d3.version);
 
 const width = 975;
-const height = 610; 
+const height = 610;
 
-// Asynchronous initialization function
+// Global variables
+let allMortalityData = [];
+let currentYear = 2017;
+let colorScale;
+let usMap; // Store map reference
+
+// Asynchronous initialization
 async function init() {
    try {
-       // Load geographic (map) data
+       // Load geographic data
        const us = await d3.json("./data/states-albers-10m.json");
-
-       // Load mortality data - FIX: Use d3.json instead of d3.csv for JSON data
-       const mortality_data = await d3.json("./data/mortality_data.json");
+       usMap = us; // Store for later use
        
-       // Verify the loaded data in the console
-       console.log('Map data:', us);
-       console.log('Mortality data sample:', mortality_data.slice(0, 5));
+       // Load mortality data
+       allMortalityData = await d3.json("./data/mortality_data.json");
        
-       // Pass loaded data to visualization function
-       createVis(us, mortality_data);
+       console.log('Data loaded successfully');
+       
+       // Create year slider first
+       createYearSlider();
+       
+       // Then create visualization with default year
+       createVis(us, filterDataByYear(currentYear));
    } catch (error) {
-       // Catch and report errors clearly
        console.error('Error loading data:', error);
    }
 }
 
-// Function to create our visualization - MOVED UP before it's referenced
+function filterDataByYear(year) {
+    return allMortalityData.filter(d => d.Year === year);
+}
+function createYearSlider() {
+    const years = [...new Set(allMortalityData.map(d => d.Year))].sort((a, b) => a - b);
+    
+    // Create container with proper dimensions
+    const sliderContainer = d3.select("#vis1")
+        .append("div")
+        .attr("class", "slider-container")
+        .style("width", "100%");
+    
+    // Add label
+    sliderContainer.append("div")
+        .attr("class", "slider-label")
+        .text("Select Year");
+    
+    // Create SVG with proper dimensions and class
+    const sliderSvg = sliderContainer.append("svg")
+        .attr("class", "slider-svg")
+        .attr("viewBox", `0 0 ${width} 80`); // Width matches your visualization
+    
+    // Create slider with adjusted margins
+    const slider = d3.sliderBottom()
+        .min(d3.min(years))
+        .max(d3.max(years))
+        .step(1)
+        .width(width - 60) // Reduced width to accommodate ticks
+        .tickFormat(d3.format("d"))
+        .tickValues(years.filter((d,i) => i % 2 === 0)) // Show every other year if too crowded
+        .default(currentYear)
+        .on("onchange", val => {
+            currentYear = val;
+            updateMapForYear(currentYear);
+        });
+    
+    // Add slider group with proper class
+    const sliderGroup = sliderSvg.append("g")
+        .attr("class", "slider-track")
+        .attr("transform", `translate(30,40)`); // Centered vertically
+    
+    // Apply the slider
+    sliderGroup.call(slider);
+    
+    // Adjust tick text positioning if needed
+    sliderGroup.selectAll(".tick text")
+        .attr("y", 15)
+        .style("font-size", "10px")
+        .style("text-anchor", "middle");
+    
+    // Adjust handle position if needed
+    sliderGroup.select(".handle")
+        .attr("class", "slider-handle");
+}
+
+function updateMapForYear(year) {
+    const yearData = filterDataByYear(year);
+    const stateDataMap = {};
+    
+    yearData.forEach(d => {
+        if (!stateDataMap[d.State] || stateDataMap[d.State].Year < d.Year) {
+            stateDataMap[d.State] = d;
+        }
+    });
+    
+    // Update the map colors
+    d3.select("#vis1 svg g")
+        .selectAll("path")
+        .attr("fill", d => {
+            const stateName = d.properties.name;
+            const stateData = stateDataMap[stateName];
+            const rate = stateData?.["Age-adjusted Death Rate"];
+            return rate ? colorScale(rate) : "#E0E0E0";
+        });
+    
+    // Update tooltip data
+    d3.select("#vis1 svg g")
+        .selectAll("path")
+        .on("mouseover", function(event, d) {
+            const stateName = d.properties.name;
+            const stateData = stateDataMap[stateName];
+            
+            d3.select(this).attr("stroke", "black").attr("stroke-width", 1.5);
+            
+            const [x, y] = d3.pointer(event, document.body);
+            
+            d3.select("#tooltip")
+                .style("display", 'block')
+                .html(`
+                    <strong>${stateData?.State || stateName}</strong><br/>
+                    Year: ${year}<br/>
+                    ${stateData?.["Cause Name"] || 'No data available'}<br/>
+                    Deaths: ${stateData?.Deaths?.toLocaleString() || 'N/A'}<br/>
+                    Rate: ${stateData?.["Age-adjusted Death Rate"]?.toFixed(1) || 'N/A'} per 100,000
+                `)
+                .style("left", `${x + 10}px`)
+                .style("top", `${y + 10}px`)
+                .style("opacity", 1);
+        });
+}
+
 function createVis(us, mortality_data) {
-   // Create a map of state names to data for easier lookup
+   // Create state data map
    const stateDataMap = {};
    
-   // Filter for the latest year and specific cause if needed
-   // For now, let's just use the first cause type for each state
    mortality_data.forEach(d => {
-       // If this state already exists in our map and it's not a newer record, skip
-       if (stateDataMap[d.State] && stateDataMap[d.State].Year < d.Year) {
-           return;
+       if (!stateDataMap[d.State] || stateDataMap[d.State].Year < d.Year) {
+           stateDataMap[d.State] = d;
        }
-       // Otherwise add/update the state data
-       stateDataMap[d.State] = d;
    });
-   
-   console.log('State data map:', stateDataMap);
    
    // Get topojson features
    const states_topo = topojson.feature(us, us.objects.states);
 
-   // Match topojson states with our mortality data
+   // Match states with mortality data
    states_topo.features.forEach(s => {
-       // Get state name from properties
        const stateName = s.properties.name;
        if (stateDataMap[stateName]) {
            s.properties.state_info = stateDataMap[stateName];
        }
-       // Special case for District of Columbia if needed
        else if (stateName === "District of Columbia" && stateDataMap["District of Columbia"]) {
            s.properties.state_info = stateDataMap["District of Columbia"];
        }
    });
    
-   // Now create the visualization with the processed data
+   // Create the visualization
    createMap(us, states_topo);
 }
 
-// Function to actually create the map - separating data processing from visualization
 function createMap(us, states_topo) {
    const zoom = d3.zoom()
        .scaleExtent([1, 8])
        .on("zoom", zoomed);
 
-   const svg = d3.select("#vis").append("svg")
+   const svg = d3.select("#vis1").append("svg")
        .attr("viewBox", [5, 5, width, height])
        .attr("width", width)
        .attr("height", height)
        .attr("style", "max-width: 100%; height: auto;")
        .on("click", reset);
 
-   // Create tooltip div if it doesn't exist
+   // Create tooltip if it doesn't exist
    if (!d3.select("#tooltip").node()) {
       d3.select("body").append("div")
         .attr("id", "tooltip")
@@ -86,7 +183,7 @@ function createMap(us, states_topo) {
    const path = d3.geoPath();
    const g = svg.append("g");
 
-   // Find the range of death rates for proper color scaling
+   // Calculate rate range for color scale
    const allRates = states_topo.features
        .map(d => d.properties.state_info?.["Age-adjusted Death Rate"])
        .filter(rate => rate !== undefined);
@@ -94,11 +191,8 @@ function createMap(us, states_topo) {
    const minRate = Math.min(...allRates);
    const maxRate = Math.max(...allRates);
    
-   console.log(`Death rates range from ${minRate} to ${maxRate}`);
-
-   // Updated color scale with dynamic domain based on data
-   // Changed from white to a very light yellow for better visibility
-   const colorScale = d3.scaleLinear()
+   // Create color scale
+   colorScale = d3.scaleLinear()
        .domain([minRate, (minRate + maxRate) / 2, maxRate])
        .range(["#FFF8E1", "orange", "red"]);
 
@@ -112,7 +206,7 @@ function createMap(us, states_topo) {
        .attr("d", path)
        .attr("fill", d => {
            const rate = d.properties.state_info?.["Age-adjusted Death Rate"];
-           return rate ? colorScale(rate) : "#E0E0E0"; // Light gray for states with no data
+           return rate ? colorScale(rate) : "#E0E0E0";
        })
        .on("mouseover", function(event, d) {
           d3.select(this).attr("stroke", "black").attr("stroke-width", 1.5);
@@ -123,6 +217,7 @@ function createMap(us, states_topo) {
               .style("display", 'block')
               .html(`
                   <strong>${d.properties.state_info?.State || d.properties.name}</strong><br/>
+                  Year: ${currentYear}<br/>
                   ${d.properties.state_info?.["Cause Name"] || 'No data available'}<br/>
                   Deaths: ${d.properties.state_info?.Deaths?.toLocaleString() || 'N/A'}<br/>
                   Rate: ${d.properties.state_info?.["Age-adjusted Death Rate"]?.toFixed(1) || 'N/A'} per 100,000
@@ -142,11 +237,7 @@ function createMap(us, states_topo) {
              .style("top", `${y + 10}px`);
        });
      
-   // Add state names as title (visible on hover in most browsers)
-   states.append("title")
-       .text(d => d.properties.name);
-
-   // Add state borders - changed from white to gray for better visibility
+   // Add state borders
    g.append("path")
        .attr("fill", "none")
        .attr("stroke", "#666666")
@@ -165,24 +256,19 @@ function createMap(us, states_topo) {
        );
    }
 
-   // Keep track of currently selected state
    let selectedState = null;
 
    function clicked(event, d) {
        event.stopPropagation();
        
-       // Check if clicking on the already selected state
        if (selectedState === this) {
-           // Clicking on already selected state - just revert to original color without zooming
            d3.select(this).transition().style("fill", null);
            selectedState = null;
        } else {
-           // Clicking on a different state - reset previous selection and select new one
            states.transition().style("fill", null);
            d3.select(this).transition().style("fill", "red");
            selectedState = this;
            
-           // Only zoom when selecting a new state (not when unselecting)
            const [[x0, y0], [x1, y1]] = path.bounds(d);
            svg.transition().duration(750).call(
               zoom.transform,
@@ -200,9 +286,6 @@ function createMap(us, states_topo) {
        g.attr("transform", transform);
        g.attr("stroke-width", 1 / transform.k);
    }
-   
-   return svg.node();
 }
 
-// Trigger data loading and visualization when the window loads
 window.addEventListener('load', init);

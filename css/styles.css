@@ -100,3 +100,24 @@ button {
     margin-bottom: 5px;
     font-size: 16px;
   }
+
+  /* Disease selector styles */
+#disease-selector-container {
+    margin: 20px auto;
+    max-width: 800px;
+    padding: 0 15px;
+}
+
+#disease-select {
+    width: 100%;
+    padding: 8px;
+    font-size: 14px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background-color: white;
+    margin-top: 5px;
+}
+
+#disease-select option {
+    padding: 5px;
+}

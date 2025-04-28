@@ -102,7 +102,6 @@ function createYearSlider() {
     sliderGroup.select(".handle")
         .attr("class", "slider-handle");
 }
-
 function createCauseDropdown() {
     // Get unique causes from data
     const causes = [...new Set(allMortalityData.map(d => d["Cause Name"]))].sort();
@@ -110,14 +109,19 @@ function createCauseDropdown() {
     // Set default cause
     currentCause = causes[0];
     
-    const dropdown = d3.select("#vis1")
+    // Create container for controls
+    const controlsContainer = d3.select("#vis1")
         .append("div")
-        .attr("class", "dropdown-container")
-        .style("margin", "10px 0");
+        .attr("class", "controls-container");
+    
+    // Left-aligned dropdown container
+    const dropdown = controlsContainer.append("div")
+        .attr("class", "dropdown-container");
         
     dropdown.append("label")
         .attr("for", "cause-select")
-        .text("Select Cause of Death: ");
+        .text("Select Cause of Death: ")
+        .style("margin-right", "10px");
         
     const select = dropdown.append("select")
         .attr("id", "cause-select")
@@ -133,8 +137,75 @@ function createCauseDropdown() {
         .attr("value", d => d)
         .text(d => d);
     
+    // Right-aligned legend wrapper
+    const legendWrapper = controlsContainer.append("div")
+        .attr("class", "legend-wrapper");
+    
+    // Add color legend
+    createColorLegend(legendWrapper);
+    
     // Trigger initial update
     updateDataForCause(currentCause);
+}
+
+function createColorLegend(container) {
+    // Create SVG for the legend
+    const legendWidth = 200;
+    const legendHeight = 20;
+    
+    const svg = container.append("svg")
+        .attr("width", legendWidth)
+        .attr("height", legendHeight)
+        .attr("class", "color-legend");
+    
+    // Add gradient definition
+    const defs = svg.append("defs");
+    const gradient = defs.append("linearGradient")
+        .attr("id", "legend-gradient")
+        .attr("x1", "0%")
+        .attr("y1", "0%")
+        .attr("x2", "100%")
+        .attr("y2", "0%");
+    
+    gradient.append("stop")
+        .attr("offset", "0%")
+        .attr("stop-color", "#ffebee");
+    
+    gradient.append("stop")
+        .attr("offset", "100%")
+        .attr("stop-color", "#b71c1c");
+    
+    // Add gradient rectangle
+    svg.append("rect")
+        .attr("width", legendWidth)
+        .attr("height", legendHeight)
+        .style("fill", "url(#legend-gradient)");
+    
+    // Add labels container
+    const labels = container.append("div")
+        .attr("class", "legend-labels");
+    
+    // Add min/max labels
+    labels.append("span")
+        .attr("class", "legend-label")
+        .attr("id", "legend-min")
+        .text("0");
+    
+    labels.append("span")
+        .attr("class", "legend-label")
+        .attr("id", "legend-max")
+        .text("0");
+}
+function updateColorLegend() {
+    // Get current data to determine min/max values
+    const currentData = filterDataByYearAndCause(currentYear, currentCause);
+    const allRates = currentData.map(d => d["Age-adjusted Death Rate"]).filter(rate => rate !== undefined);
+    const minRate = allRates.length > 0 ? Math.min(...allRates) : 0;
+    const maxRate = allRates.length > 0 ? Math.max(...allRates) : 1;
+    
+    // Update legend labels with formatted numbers
+    d3.select("#legend-min").text(minRate.toFixed(1));
+    d3.select("#legend-max").text(maxRate.toFixed(1));
 }
 
 function updateDataForCause(cause) {
@@ -178,6 +249,7 @@ function updateDataForCause(cause) {
     
     // Update the visualization
     updateMapForYear(currentYear);
+    updateColorLegend(); // Add this line
 }
 
 function updateMapForYear(year) {

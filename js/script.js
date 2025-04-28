@@ -6,44 +6,53 @@ const height = 610;
 // Global variables
 let allMortalityData = [];
 let currentYear = 2017;
+let currentCause = "All causes";
 let colorScale;
-let usMap; // Store map reference
-let dataByYear = {}; // NEW: to store data organized by year
-let states; // Need to declare globally for updateMapForYear
-let selectedState = null; // Also global
+let usMap;
+let dataByYear = {};
+let states;
+let selectedState = null;
 
 // Asynchronous initialization
 async function init() {
     try {
         // Load geographic data
         const us = await d3.json("./data/states-albers-10m.json");
-        usMap = us; // Store for later use
+        usMap = us;
         
         // Load mortality data
         allMortalityData = await d3.json("./data/mortality_data.json");
 
         console.log('Data loaded successfully');
 
-        // Organize mortality data by year and state for quick lookup
+        // Organize mortality data by year and state
         allMortalityData.forEach(d => {
             if (!dataByYear[d.Year]) {
                 dataByYear[d.Year] = {};
             }
-            dataByYear[d.Year][d.State] = d;
+            dataByYear[d.Year][d.State] = d; // Store the most recent entry per state/year
         });
 
-        // Create year slider first
+        // Create controls first
         createYearSlider();
+        createCauseDropdown(); // This sets currentCause to first available option
         
-        // Then create visualization with default year
-        createVis(us, filterDataByYear(currentYear));
+        // Then create visualization with default year and cause
+        createVis(us, filterDataByYearAndCause(currentYear, currentCause));
     } catch (error) {
         console.error('Error loading data:', error);
     }
 }
 
-function filterDataByYear(year) {
-    return allMortalityData.filter(d => d.Year === year);
+function filterDataByYearAndCause(year, cause) {
+    return allMortalityData.filter(d => d.Year === year && d["Cause Name"] === cause);
+}
+
+function filterDataByYearAndCause(year, cause) {
+    if (cause === "All causes") {
+        return allMortalityData.filter(d => d.Year === year);
+    }
+    return allMortalityData.filter(d => d.Year === year && d["Cause Name"] === cause);
 }
 
 function createYearSlider() {
@@ -93,37 +102,126 @@ function createYearSlider() {
     sliderGroup.select(".handle")
         .attr("class", "slider-handle");
 }
-function updateMapForYear(year) {
-    // Keep the same color scale (don't recalculate for each year)
-    // This ensures consistent coloring across years
+
+function createCauseDropdown() {
+    // Get unique causes from data
+    const causes = [...new Set(allMortalityData.map(d => d["Cause Name"]))].sort();
     
-    // Update map colors based on the selected year
-    states.transition().duration(500).attr("fill", d => {
-        const stateData = d.properties.state_info?.[year];
-        return stateData ? colorScale(stateData["Age-adjusted Death Rate"]) : "#E0E0E0";
-    });
-
-    // Update tooltip info if a state is selected
-    if (selectedState) {
-        const selectedData = d3.select(selectedState).datum().properties.state_info?.[year];
-        if (selectedData) {
-            d3.select("#deaths-label").text(`Deaths: ${selectedData.Deaths}`);
-            d3.select("#rate-label").text(`Rate of Deaths: ${selectedData["Age-adjusted Death Rate"]}`);
-        } else {
-            d3.select("#deaths-label").text("Deaths: N/A");
-            d3.select("#rate-label").text("Rate of Deaths: N/A");
-        }
-    }
+    // Set default cause
+    currentCause = causes[0];
+    
+    const dropdown = d3.select("#vis1")
+        .append("div")
+        .attr("class", "dropdown-container")
+        .style("margin", "10px 0");
+        
+    dropdown.append("label")
+        .attr("for", "cause-select")
+        .text("Select Cause of Death: ");
+        
+    const select = dropdown.append("select")
+        .attr("id", "cause-select")
+        .on("change", function() {
+            currentCause = this.value;
+            updateDataForCause(currentCause);
+        });
+        
+    select.selectAll("option")
+        .data(causes)
+        .enter()
+        .append("option")
+        .attr("value", d => d)
+        .text(d => d);
+    
+    // Trigger initial update
+    updateDataForCause(currentCause);
 }
-function createVis(us, mortality_data) {
-    const states_topo = topojson.feature(us, us.objects.states);
 
-    // Match topojson states with our mortality data (like in working version)
+function updateDataForCause(cause) {
+    // Reorganize data for the selected cause
+    const newDataByYear = {};
+    
+    allMortalityData.forEach(d => {
+        if (d["Cause Name"] === cause) {
+            if (!newDataByYear[d.Year]) {
+                newDataByYear[d.Year] = {};
+            }
+            newDataByYear[d.Year][d.State] = d;
+        }
+    });
+    
+    // Update the global dataByYear reference
+    dataByYear = newDataByYear;
+    
+    // Reattach data to states
+    const states_topo = topojson.feature(usMap, usMap.objects.states);
     states_topo.features.forEach(feature => {
         const stateName = feature.properties.name;
         feature.properties.state_info = {};
         
-        // Add data for all years to each state feature
+        Object.keys(dataByYear).forEach(year => {
+            if (dataByYear[year][stateName]) {
+                feature.properties.state_info[year] = dataByYear[year][stateName];
+            }
+        });
+    });
+    
+    // Recalculate color scale based on current data
+    const currentData = filterDataByYearAndCause(currentYear, cause);
+    const allRates = currentData.map(d => d["Age-adjusted Death Rate"]).filter(rate => rate !== undefined);
+    const minRate = allRates.length > 0 ? Math.min(...allRates) : 0;
+    const maxRate = allRates.length > 0 ? Math.max(...allRates) : 1;
+
+    colorScale = d3.scaleLinear()
+        .domain([minRate, maxRate])
+        .range(["#ffebee", "#b71c1c"]);
+    
+    // Update the visualization
+    updateMapForYear(currentYear);
+}
+
+function updateMapForYear(year) {
+    // Get data for current year and cause
+    const yearData = filterDataByYearAndCause(year, currentCause);
+    
+    // Update color scale based on current data
+    const allRates = yearData.map(d => d["Age-adjusted Death Rate"]).filter(rate => rate !== undefined);
+    const minRate = allRates.length > 0 ? Math.min(...allRates) : 0;
+    const maxRate = allRates.length > 0 ? Math.max(...allRates) : 1;
+
+    colorScale = d3.scaleLinear()
+        .domain([minRate, maxRate])
+        .range(["#ffebee", "#b71c1c"]);
+    
+    // Update map colors
+    if (states) {
+        states.transition().duration(500).attr("fill", d => {
+            const stateData = d.properties.state_info?.[year];
+            return stateData ? colorScale(stateData["Age-adjusted Death Rate"]) : "#E0E0E0";
+        });
+    }
+
+    // Update selected state info if one is selected
+    if (selectedState) {
+        const selectedData = d3.select(selectedState).datum().properties.state_info?.[year];
+        if (selectedData) {
+            d3.select("#deaths-label").text(`Deaths: ${selectedData.Deaths}`);
+            d3.select("#rate-label").text(`Rate: ${selectedData["Age-adjusted Death Rate"]?.toFixed(1) || 'N/A'}`);
+        } else {
+            d3.select("#deaths-label").text("Deaths: N/A");
+            d3.select("#rate-label").text("Rate: N/A");
+        }
+    }
+}
+
+function createVis(us, mortality_data) {
+    const states_topo = topojson.feature(us, us.objects.states);
+
+    // Attach data to states
+    states_topo.features.forEach(feature => {
+        const stateName = feature.properties.name;
+        feature.properties.state_info = {};
+        
         Object.keys(dataByYear).forEach(year => {
             if (dataByYear[year][stateName]) {
                 feature.properties.state_info[year] = dataByYear[year][stateName];
@@ -131,14 +229,14 @@ function createVis(us, mortality_data) {
         });
     });
 
-    // Calculate color scale based on ALL data (not just current year)
-    const allRates = allMortalityData.map(d => d["Age-adjusted Death Rate"]).filter(rate => rate !== undefined);
-    const minRate = Math.min(...allRates);
-    const maxRate = Math.max(...allRates);
+    // Calculate color scale based on current data
+    const allRates = mortality_data.map(d => d["Age-adjusted Death Rate"]).filter(rate => rate !== undefined);
+    const minRate = allRates.length > 0 ? Math.min(...allRates) : 0;
+    const maxRate = allRates.length > 0 ? Math.max(...allRates) : 1;
 
     colorScale = d3.scaleLinear()
-        .domain([minRate, maxRate])  // Simpler two-point scale
-        .range(["#ffebee", "#b71c1c"]);  // Light red to dark red
+        .domain([minRate, maxRate])
+        .range(["#ffebee", "#b71c1c"]);
 
     createMap(us, states_topo);
 }
@@ -166,17 +264,16 @@ function createMap(us, states_topo) {
     const g = svg.append("g");
 
     states = g.append("g")
-    .attr("cursor", "pointer")
-    .selectAll("path")
-    .data(states_topo.features)
-    .join("path")
-    .on("click", clicked)
-    .attr("d", path)
-    .attr("fill", d => {
-        const stateData = d.properties.state_info?.[currentYear];
-        return stateData ? colorScale(stateData["Age-adjusted Death Rate"]) : "#E0E0E0";
-    })
-    // ... rest of your event handlers ...
+        .attr("cursor", "pointer")
+        .selectAll("path")
+        .data(states_topo.features)
+        .join("path")
+        .on("click", clicked)
+        .attr("d", path)
+        .attr("fill", d => {
+            const stateData = d.properties.state_info?.[currentYear];
+            return stateData ? colorScale(stateData["Age-adjusted Death Rate"]) : "#E0E0E0";
+        })
         .on("mouseover", function(event, d) {
             d3.select(this).attr("stroke", "black").attr("stroke-width", 1.5);
         
@@ -189,12 +286,13 @@ function createMap(us, states_topo) {
                 .html(stateData ? `
                     <strong>${stateData.State}</strong><br/>
                     Year: ${currentYear}<br/>
-                    ${stateData["Cause Name"] || 'No cause listed'}<br/>
+                    Cause: ${currentCause === "All causes" ? (stateData["Cause Name"] || 'Multiple causes') : currentCause}<br/>
                     Deaths: ${stateData.Deaths?.toLocaleString() || 'N/A'}<br/>
                     Rate: ${stateData["Age-adjusted Death Rate"]?.toFixed(1) || 'N/A'} per 100,000
                 ` : `
                     <strong>${d.properties.name}</strong><br/>
                     Year: ${currentYear}<br/>
+                    Cause: ${currentCause}<br/>
                     No data available
                 `)
                 .style("left", `${x + 10}px`)
@@ -223,8 +321,8 @@ function createMap(us, states_topo) {
 
     function reset() {
         states.transition().style("fill", d => {
-            const stateData = dataByYear[currentYear][d.properties.name];
-            return stateData ? colorScale(stateData["Age-adjusted Death Rate"]) : "#ccc";
+            const stateData = d.properties.state_info?.[currentYear];
+            return stateData ? colorScale(stateData["Age-adjusted Death Rate"]) : "#E0E0E0";
         });
         svg.transition().duration(750).call(
             zoom.transform,
@@ -236,21 +334,32 @@ function createMap(us, states_topo) {
     function clicked(event, d) {
         event.stopPropagation();
 
-        if (selectedState === d) {
+        if (selectedState === this) {
             selectedState = null;
+            d3.select(this).transition().style("fill", d => {
+                const stateData = d.properties.state_info?.[currentYear];
+                return stateData ? colorScale(stateData["Age-adjusted Death Rate"]) : "#E0E0E0";
+            });
         } else {
-            selectedState = d;
+            if (selectedState) {
+                d3.select(selectedState).transition().style("fill", d => {
+                    const stateData = d.properties.state_info?.[currentYear];
+                    return stateData ? colorScale(stateData["Age-adjusted Death Rate"]) : "#E0E0E0";
+                });
+            }
+            selectedState = this;
+            d3.select(this).transition().style("fill", "red");
+            
+            const [[x0, y0], [x1, y1]] = path.bounds(d);
+            svg.transition().duration(750).call(
+                zoom.transform,
+                d3.zoomIdentity
+                    .translate(width / 2, height / 2)
+                    .scale(Math.min(8, 0.9 / Math.max((x1 - x0) / width, (y1 - y0) / height)))
+                    .translate(-(x0 + x1) / 2, -(y0 + y1) / 2),
+                d3.pointer(event, svg.node())
+            );
         }
-
-        const [[x0, y0], [x1, y1]] = path.bounds(d);
-        svg.transition().duration(750).call(
-            zoom.transform,
-            d3.zoomIdentity
-                .translate(width / 2, height / 2)
-                .scale(Math.min(8, 0.9 / Math.max((x1 - x0) / width, (y1 - y0) / height)))
-                .translate(-(x0 + x1) / 2, -(y0 + y1) / 2),
-            d3.pointer(event, svg.node())
-        );
     }
 
     function zoomed(event) {

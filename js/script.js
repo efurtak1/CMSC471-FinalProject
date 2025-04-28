@@ -149,10 +149,15 @@ function createCauseDropdown() {
 }
 
 function createColorLegend(container) {
-    // Create SVG for the legend
     const legendWidth = 200;
     const legendHeight = 20;
     
+    // Add title above the legend
+    container.append("div")
+        .attr("class", "legend-title")
+        .text("Death Rates per 100,000");
+    
+    // Create SVG for the legend
     const svg = container.append("svg")
         .attr("width", legendWidth)
         .attr("height", legendHeight)

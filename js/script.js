@@ -34,11 +34,16 @@ async function init() {
         });
 
         // Create controls first
-        createYearSlider();
+        createYearSlider("#vis1");
         createCauseDropdown(); // This sets currentCause to first available option
-        
         // Then create visualization with default year and cause
-        createVis(us, filterDataByYearAndCause(currentYear, currentCause));
+        createVis1(us, filterDataByYearAndCause(currentYear, currentCause));
+
+        createYearSlider("#slider-container");
+        d3.json("./data/mortality_data.json").then(data => {
+            createVis2(allMortalityData, currentYear);
+        })
+
     } catch (error) {
         console.error('Error loading data:', error);
     }
@@ -55,10 +60,10 @@ function filterDataByYearAndCause(year, cause) {
     return allMortalityData.filter(d => d.Year === year && d["Cause Name"] === cause);
 }
 
-function createYearSlider() {
+function createYearSlider(vis) {
     const years = [...new Set(allMortalityData.map(d => d.Year))].sort((a, b) => a - b);
 
-    const sliderContainer = d3.select("#vis1")
+    const sliderContainer = d3.select(vis)
         .append("div")
         .attr("class", "slider-container")
         .style("width", "100%");
@@ -291,7 +296,7 @@ function updateMapForYear(year) {
     }
 }
 
-function createVis(us, mortality_data) {
+function createVis1(us, mortality_data) {
     const states_topo = topojson.feature(us, us.objects.states);
 
     // Attach data to states
@@ -444,6 +449,90 @@ function createMap(us, states_topo) {
         g.attr("transform", transform);
         g.attr("stroke-width", 1 / transform.k);
     }
+}
+
+function createVis2(data, year) {
+    d3.select("#bubble-chart").selectAll("*").remove();
+
+    const filtered = data.filter(d => +d.Year === year);
+  
+    // Step 2: Group by "Cause Name" and sum Deaths across all states
+    const grouped = d3.rollups(
+      filtered,
+      v => d3.sum(v, d => +d.Deaths),
+      d => d["Cause Name"]
+    );
+  
+    // Step 3: Convert to hierarchical format for D3 pack
+    const hierarchicalData = {
+      children: grouped.map(([name, value]) => ({ name, value }))
+    };
+  
+    // Step 4: Create packed bubble layout
+    const pack = data => d3.pack()
+    .size([width, height])
+    .padding(2)(
+      d3.hierarchy(data)
+        .sum(d => d.value * 2) // <— increase bubble size multiplier
+    );
+    const root = pack(hierarchicalData);
+
+    console.log(root.leaves())
+
+    // const color = d3.scaleOrdinal(d3.schemeCategory10);
+
+    const color = d3.scaleSequential()
+    .domain(d3.extent(grouped, d => Math.log10(d[1] + 1))) 
+    .interpolator(d3.interpolateReds);
+
+    const svg = d3.select("#bubble-chart")
+    .attr("width", width)
+    .attr("height", height)
+    .attr("viewBox", [0, 0, width, height])
+    .attr("text-anchor", "middle")
+    .style("font", "12px sans-serif");
+  
+    const node = svg.selectAll("g")
+      .data(root.leaves())
+      .join("g")
+      .attr("transform", d => `translate(${d.x},${d.y})`);
+  
+    node.append("circle")
+    .attr("r", d => d.r * 1.2)
+    .attr("fill", d => color(Math.log10(d.data.value + 1)))
+    .attr("stroke", "black")
+    .attr("stroke-width", 1);
+  
+    node.append("text")
+      .text(d => d.data.name)
+      .attr("dy", "0.3em")
+      .style("font-size", d => Math.min(2 * d.r / d.data.name.length, 14));
+
+    node.on("click", (event, d) => {
+        alert(`Cause: ${d.data.name}\nDeaths: ${d.data.value}`);
+        // Or console.log(d); to inspect the full data object
+      });
+
+    const tooltip = d3.select("#tooltip");
+
+    node.on("mouseover", (event, d) => {
+        tooltip.transition()
+          .duration(200)
+          .style("opacity", 0.9);
+        tooltip.html(`<strong>${d.data.name}</strong><br/>Deaths: ${d.data.value.toLocaleString()}`)
+          .style("left", (event.pageX + 10) + "px")
+          .style("top", (event.pageY - 28) + "px");
+      })
+      .on("mousemove", (event) => {
+        tooltip
+          .style("left", (event.pageX + 10) + "px")
+          .style("top", (event.pageY - 28) + "px");
+      })
+      .on("mouseout", () => {
+        tooltip.transition()
+          .duration(500)
+          .style("opacity", 0);
+      });
 }
 
 window.addEventListener('load', init);

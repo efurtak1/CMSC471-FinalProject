@@ -51,6 +51,18 @@
     border: 1px solid #ccc;
 }
 
+
+/* Visualization area */
+#vis2 {
+    margin-top: 20px;
+    position: relative; /* Needed for legend positioning */
+}
+
+#vis2 svg {
+    margin: 0 auto;
+    border: 1px solid #ccc;
+}
+
 /* Controls container - modified for proper alignment */
 .controls-container {
     margin-top: 30px;

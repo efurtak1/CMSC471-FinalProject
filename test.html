@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Bubble Test</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+<body>
+  <svg id="vis2"></svg>
+  <script>
+    const width = 800, height = 800;
+
+    // 1) Make sure the SVG is big enough
+    const svg = d3.select("#vis2")
+      .attr("viewBox", `0 0 ${width} ${height}`)
+      .attr("width", width)
+      .attr("height", height)
+      .attr("text-anchor", "middle")
+      .style("font", "12px sans-serif");
+
+    function createVis2(data, year) {
+      svg.selectAll("*").remove();
+
+      // 2) Filter + roll-up
+      const filtered = data.filter(d => d.Year === year);
+      const grouped = d3.rollups(
+        filtered,
+        v => d3.sum(v, d => d.Deaths),
+        d => d["Cause Name"]
+      );
+
+      const hierarchicalData = {
+        children: grouped.map(([name, value]) => ({ name, value }))
+      };
+
+      // 3) Debug
+      console.log("hierarchy in:", hierarchicalData);
+
+      const pack = d3.pack()
+        .size([width, height])
+        .padding(3);
+
+      const root = pack(d3.hierarchy(hierarchicalData)
+                          .sum(d => d.value));
+
+      console.log("leaves out:", root.leaves());
+
+      // 4) Draw
+      const node = svg.selectAll("g")
+        .data(root.leaves())
+        .join("g")
+          .attr("transform", d => `translate(${d.x},${d.y})`);
+
+      node.append("circle")
+        .attr("r", d => d.r)
+        .attr("fill", "orange")
+        .attr("stroke", "black");
+
+      node.append("text")
+        .text(d => d.data.name)
+        .attr("dy", "0.3em")
+        .style("font-size", d => Math.min(2 * d.r / d.data.name.length, 14));
+    }
+
+    // fake test data
+    const testData = [
+      { Year: 2017, "Cause Name": "A", Deaths: 1000 },
+      { Year: 2017, "Cause Name": "B", Deaths: 3000 },
+      { Year: 2017, "Cause Name": "C", Deaths: 2000 }
+    ];
+
+    createVis2(testData, 2017);
+  </script>
+</body>
+</html>

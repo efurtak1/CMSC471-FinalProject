@@ -456,83 +456,244 @@ function createVis2(data, year) {
 
     const filtered = data.filter(d => +d.Year === year);
   
-    // Step 2: Group by "Cause Name" and sum Deaths across all states
+    // Group by "Cause Name" and sum Deaths across all states
     const grouped = d3.rollups(
-      filtered,
-      v => d3.sum(v, d => +d.Deaths),
-      d => d["Cause Name"]
+        filtered,
+        v => d3.sum(v, d => +d.Deaths),
+        d => d["Cause Name"]
     );
   
-    // Step 3: Convert to hierarchical format for D3 pack
+    // Convert to hierarchical format for D3 pack
     const hierarchicalData = {
-      children: grouped.map(([name, value]) => ({ name, value }))
+        children: grouped.map(([name, value]) => ({ name, value }))
     };
   
-    // Step 4: Create packed bubble layout
+    // Create packed bubble layout with more padding
     const pack = data => d3.pack()
-    .size([width, height])
-    .padding(2)(
-      d3.hierarchy(data)
-        .sum(d => d.value * 2) // <— increase bubble size multiplier
-    );
+        .size([width, height * 0.8])
+        .padding(5)(
+            d3.hierarchy(data)
+            .sum(d => d.value * 2)
+        );
     const root = pack(hierarchicalData);
 
-    console.log(root.leaves())
-
-    // const color = d3.scaleOrdinal(d3.schemeCategory10);
-
+    // Color scale
     const color = d3.scaleSequential()
-    .domain(d3.extent(grouped, d => Math.log10(d[1] + 1))) 
-    .interpolator(d3.interpolateReds);
+        .domain(d3.extent(grouped, d => Math.log10(d[1] + 1))) 
+        .interpolator(d3.interpolateReds);
 
     const svg = d3.select("#bubble-chart")
-    .attr("width", width)
-    .attr("height", height)
-    .attr("viewBox", [0, 0, width, height])
-    .attr("text-anchor", "middle")
-    .style("font", "12px sans-serif");
+        .attr("width", width)
+        .attr("height", height)
+        .attr("viewBox", [0, 0, width, height])
+        .attr("text-anchor", "middle")
+        .style("font", "12px sans-serif");
   
-    const node = svg.selectAll("g")
-      .data(root.leaves())
-      .join("g")
-      .attr("transform", d => `translate(${d.x},${d.y})`);
+    // Add zoom behavior
+    const zoom = d3.zoom()
+        .scaleExtent([0.5, 8])
+        .on("zoom", (event) => {
+            g.attr("transform", event.transform);
+        });
+    
+    svg.call(zoom);
+    
+    // Create a group for all bubbles
+    const g = svg.append("g");
+  
+    // Add force simulation with adjusted parameters
+    const simulation = d3.forceSimulation(root.leaves())
+        .force("charge", d3.forceManyBody().strength(1))
+        .force("x", d3.forceX(width / 2).strength(0.02))
+        .force("y", d3.forceY(height * 0.85).strength(0.1))
+        .force("collision", d3.forceCollide()
+            .radius(d => d.r + 2)
+            .strength(0.8)
+            .iterations(10)
+        )
+        .alphaDecay(0.02)
+        .velocityDecay(0.4)
+        .on("tick", ticked);
+  
+    const node = g.selectAll("g")
+        .data(root.leaves())
+        .join("g")
+        .attr("transform", d => `translate(${d.x},${d.y})`)
+        .call(d3.drag()
+            .on("start", dragstarted)
+            .on("drag", dragged)
+            .on("end", dragended));
   
     node.append("circle")
-    .attr("r", d => d.r * 1.2)
-    .attr("fill", d => color(Math.log10(d.data.value + 1)))
-    .attr("stroke", "black")
-    .attr("stroke-width", 1);
+        .attr("r", d => d.r)
+        .attr("fill", d => color(Math.log10(d.data.value + 1)))
+        .attr("stroke", "black")
+        .attr("stroke-width", 1)
+        .attr("cursor", "pointer")
+        .attr("opacity", 0)
+        .transition()
+        .duration(1000)
+        .attr("opacity", 1);
   
     node.append("text")
-      .text(d => d.data.name)
-      .attr("dy", "0.3em")
-      .style("font-size", d => Math.min(2 * d.r / d.data.name.length, 14));
+        .text(d => d.data.name)
+        .attr("dy", "0.3em")
+        .style("font-size", d => Math.min(2 * d.r / d.data.name.length, 14))
+        .attr("pointer-events", "none")
+        .attr("opacity", 0)
+        .transition()
+        .delay(500)
+        .duration(800)
+        .attr("opacity", 1);
 
-    node.on("click", (event, d) => {
-        alert(`Cause: ${d.data.name}\nDeaths: ${d.data.value}`);
-        // Or console.log(d); to inspect the full data object
-      });
+    // Create a dedicated tooltip div if it doesn't exist
+    let tooltip = d3.select("#bubble-tooltip");
+    if (tooltip.empty()) {
+        tooltip = d3.select("body").append("div")
+            .attr("id", "bubble-tooltip")
+            .attr("class", "tooltip")
+            .style("opacity", 0)
+            .style("position", "absolute")
+            .style("background", "white")
+            .style("padding", "8px")
+            .style("border", "1px solid #ddd")
+            .style("border-radius", "4px")
+            .style("pointer-events", "none")
+            .style("font-family", "sans-serif")
+            .style("font-size", "12px")
+            .style("box-shadow", "2px 2px 5px rgba(0,0,0,0.2)");
+    }
 
-    const tooltip = d3.select("#tooltip");
-
-    node.on("mouseover", (event, d) => {
+    // Enhanced hover handlers
+    node.on("mouseover", function(event, d) {
+        // Bring to front
+        d3.select(this).raise();
+        
+        // Visual feedback
+        d3.select(this).select("circle")
+            .attr("stroke-width", 2)
+            .attr("stroke", "white");
+        
+        // Position and show tooltip
         tooltip.transition()
-          .duration(200)
-          .style("opacity", 0.9);
-        tooltip.html(`<strong>${d.data.name}</strong><br/>Deaths: ${d.data.value.toLocaleString()}`)
-          .style("left", (event.pageX + 10) + "px")
-          .style("top", (event.pageY - 28) + "px");
-      })
-      .on("mousemove", (event) => {
-        tooltip
-          .style("left", (event.pageX + 10) + "px")
-          .style("top", (event.pageY - 28) + "px");
-      })
-      .on("mouseout", () => {
+            .duration(200)
+            .style("opacity", 0.9);
+            
+        tooltip.html(`
+            <div style="margin-bottom: 4px; font-weight: bold; border-bottom: 1px solid #eee; padding-bottom: 4px;">
+                ${d.data.name}
+            </div>
+            <div style="margin-bottom: 2px;">
+                <span style="color: #666">Year:</span> ${year}
+            </div>
+            <div style="margin-bottom: 2px;">
+                <span style="color: #666">Total Deaths:</span> ${d.data.value.toLocaleString()}
+            </div>
+            <div style="font-size: 11px; color: #999; margin-top: 4px;">
+                Click to pin, drag to move
+            </div>
+        `)
+        .style("left", (event.pageX + 15) + "px")
+        .style("top", (event.pageY - 28) + "px");
+    })
+    .on("mouseout", function() {
+        // Only remove highlight if not clicked (pinned)
+        if (!d3.select(this).classed("pinned")) {
+            d3.select(this).select("circle")
+                .attr("stroke-width", 1)
+                .attr("stroke", "black");
+        }
+        
+        // Hide tooltip if not pinned
+        if (!d3.select(this).classed("pinned")) {
+            tooltip.transition()
+                .duration(500)
+                .style("opacity", 0);
+        }
+    })
+    .on("mousemove", function(event) {
+        // Update tooltip position
+        tooltip.style("left", (event.pageX + 15) + "px")
+               .style("top", (event.pageY - 28) + "px");
+    });
+
+    // Click handler (now with pinning functionality)
+    node.on("click", function(event, d) {
+        // Toggle pinned state
+        const isPinned = d3.select(this).classed("pinned");
+        d3.select(this).classed("pinned", !isPinned);
+        
+        // Update all circles
+        node.select("circle")
+            .attr("stroke-width", 1)
+            .attr("stroke", "black");
+        
+        // Highlight clicked bubble if pinned
+        if (!isPinned) {
+            d3.select(this).select("circle")
+                .attr("stroke-width", 3)
+                .attr("stroke", "yellow");
+            
+            // Keep tooltip visible for pinned items
+            tooltip.style("opacity", 0.9);
+        } else {
+            // Hide tooltip when unpinning
+            tooltip.transition()
+                .duration(500)
+                .style("opacity", 0);
+        }
+        
+        event.stopPropagation(); // Prevent zoom on click
+    });
+
+    // Click on SVG background to unpin all
+    svg.on("click", function() {
+        node.classed("pinned", false)
+            .select("circle")
+            .attr("stroke-width", 1)
+            .attr("stroke", "black");
+        
         tooltip.transition()
-          .duration(500)
-          .style("opacity", 0);
-      });
+            .duration(500)
+            .style("opacity", 0);
+    });
+
+    // Initial positioning
+    root.leaves().forEach((d, i) => {
+        d.x = width * (0.2 + 0.6 * i / root.leaves().length);
+        d.y = -d.r;
+        d.vy = 0.5;
+    });
+
+    simulation.alpha(0.1).restart();
+
+    // Drag functions
+    function dragstarted(event, d) {
+        if (!event.active) simulation.alphaTarget(0.1).restart();
+        d.fx = d.x;
+        d.fy = d.y;
+    }
+    
+    function dragged(event, d) {
+        d.fx = event.x;
+        d.fy = event.y;
+    }
+    
+    function dragended(event, d) {
+        if (!event.active) simulation.alphaTarget(0.02);
+        d.fx = null;
+        d.fy = null;
+    }
+    
+    function ticked() {
+        node.attr("transform", d => `translate(${d.x},${d.y})`);
+    }
+
+    // Gradual gravity increase
+    setTimeout(() => {
+        simulation.force("y", d3.forceY(height * 0.85).strength(0.2));
+        simulation.alpha(0.5).restart();
+    }, 1500);
 }
 
 window.addEventListener('load', init);

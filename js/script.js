@@ -39,10 +39,14 @@ async function init() {
         // Then create visualization with default year and cause
         createVis1(us, filterDataByYearAndCause(currentYear, currentCause));
 
-        createYearSlider("#slider-container");
         d3.json("./data/mortality_data.json").then(data => {
+            allMortalityData = data;
+            createYearSlider_v2("#slider-container", selectedYear => {
+                createVis2(allMortalityData, selectedYear);
+            });
+        
             createVis2(allMortalityData, currentYear);
-        })
+        });
 
     } catch (error) {
         console.error('Error loading data:', error);
@@ -58,6 +62,54 @@ function filterDataByYearAndCause(year, cause) {
         return allMortalityData.filter(d => d.Year === year);
     }
     return allMortalityData.filter(d => d.Year === year && d["Cause Name"] === cause);
+}
+
+function createYearSlider_v2(vis, onYearChange) {
+    const years = [...new Set(allMortalityData.map(d => d.Year))].sort((a, b) => a - b);
+
+    const sliderContainer = d3.select(vis)
+        .append("div")
+        .attr("class", "slider-container")
+        .style("width", "100%");
+
+    sliderContainer.append("div")
+        .attr("class", "slider-label")
+        .text("Select Year");
+
+    const sliderSvg = sliderContainer.append("svg")
+        .attr("class", "slider-svg")
+        .attr("viewBox", `0 0 ${width} 80`);
+
+    const slider = d3.sliderBottom()
+        .min(d3.min(years))
+        .max(d3.max(years))
+        .step(1)
+        .width(width - 60)
+        .tickFormat(d3.format("d"))
+        .tickValues(years.filter((d, i) => i % 2 === 0))
+        .default(currentYear)
+        .on("onchange", val => {
+            currentYear = val;
+            if (onYearChange) onYearChange(currentYear);
+        })
+        .on("drag", val => {
+            currentYear = val;
+            if (onYearChange) onYearChange(currentYear);
+        });
+
+    const sliderGroup = sliderSvg.append("g")
+        .attr("class", "slider-track")
+        .attr("transform", `translate(30,40)`);
+
+    sliderGroup.call(slider);
+
+    sliderGroup.selectAll(".tick text")
+        .attr("y", 15)
+        .style("font-size", "10px")
+        .style("text-anchor", "middle");
+
+    sliderGroup.select(".handle")
+        .attr("class", "slider-handle");
 }
 
 function createYearSlider(vis) {
@@ -455,7 +507,7 @@ function createVis2(data, year) {
     d3.select("#bubble-chart").selectAll("*").remove();
 
     const filtered = data.filter(d => +d.Year === year);
-  
+    console.log(year)
     // Group by "Cause Name" and sum Deaths across all states
     const grouped = d3.rollups(
         filtered,
@@ -488,6 +540,8 @@ function createVis2(data, year) {
         .attr("viewBox", [0, 0, width, height])
         .attr("text-anchor", "middle")
         .style("font", "12px sans-serif");
+
+    const g = svg.append("g");
   
     // Add zoom behavior
     const zoom = d3.zoom()
@@ -497,15 +551,29 @@ function createVis2(data, year) {
         });
     
     svg.call(zoom);
+
+    const initialTransform = d3.zoomIdentity
+    .translate(width / 2 - 650 , height / 2 - 700)
+    .scale(1.3);
+
+    svg.call(zoom.transform, initialTransform);
     
-    // Create a group for all bubbles
-    const g = svg.append("g");
+    // // Create a group for all bubbles
+    // const g = svg.append("g");
+
+    const initialY = height * 0.5;
+
+    root.leaves().forEach((d, i) => {
+        d.x = width * (0.2 + 0.6 * i / root.leaves().length);
+        d.y = initialY + (Math.random() - 0.5) * 30;  // Add slight jitter, keep it higher
+        d.vy = 0;  // No downward velocity, so they don't fall initially
+    });
   
     // Add force simulation with adjusted parameters
     const simulation = d3.forceSimulation(root.leaves())
         .force("charge", d3.forceManyBody().strength(1))
         .force("x", d3.forceX(width / 2).strength(0.02))
-        .force("y", d3.forceY(height * 0.85).strength(0.1))
+        .force("y", d3.forceY(initialY).strength(0.1))
         .force("collision", d3.forceCollide()
             .radius(d => d.r + 2)
             .strength(0.8)
@@ -658,16 +726,17 @@ function createVis2(data, year) {
             .style("opacity", 0);
     });
 
-    // Initial positioning
-    root.leaves().forEach((d, i) => {
-        d.x = width * (0.2 + 0.6 * i / root.leaves().length);
-        d.y = -d.r;
-        d.vy = 0.5;
-    });
+    // const initialY = height * 0.5;
 
-    simulation.alpha(0.1).restart();
+    // root.leaves().forEach((d, i) => {
+    //     d.x = width * (0.2 + 0.6 * i / root.leaves().length);
+    //     d.y = initialY // Add slight jitter
+    //     d.vy = 0;  // No downward velocity
+    // });
 
-    // Drag functions
+    // simulation.alpha(0.1).restart();
+
+    // Drag funcstion
     function dragstarted(event, d) {
         if (!event.active) simulation.alphaTarget(0.1).restart();
         d.fx = d.x;

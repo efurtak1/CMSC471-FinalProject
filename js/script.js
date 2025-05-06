@@ -632,17 +632,70 @@ function createVis2(data, year) {
             .style("box-shadow", "2px 2px 5px rgba(0,0,0,0.2)");
     }
 
-    // Enhanced hover handlers
+    const legendWidth = 250;
+    const legendHeight = 20;
+    const legendMargin = 30;
+
+    const logDomain = d3.extent(grouped, d => Math.log10(d[1] + 1));
+    const linearDomain = logDomain.map(v => Math.pow(10, v) - 1); 
+
+    const defs = svg.append("defs");
+
+    const gradient = defs.append("linearGradient")
+        .attr("id", "legend-gradient")
+        .attr("x1", "0%")
+        .attr("x2", "100%")
+        .attr("y1", "0%")
+        .attr("y2", "0%");
+
+    const steps = 10;
+    const interpolator = d3.interpolateReds;
+
+    for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        gradient.append("stop")
+            .attr("offset", `${t * 100}%`)
+            .attr("stop-color", interpolator(t));
+    }
+
+    const legendGroup = svg.append("g")
+        .attr("transform", `translate(${width - legendWidth - legendMargin}, ${legendMargin})`);
+
+    legendGroup.append("rect")
+        .attr("width", legendWidth)
+        .attr("height", legendHeight)
+        .style("fill", "url(#legend-gradient)")
+        .attr("stroke", "#aaa")
+        .attr("stroke-width", 1);
+
+    legendGroup.append("text")
+        .attr("x", 0)
+        .attr("y", legendHeight + 20)
+        .text(Math.round(linearDomain[0]).toLocaleString())
+        .style("font-size", "12px");
+
+    legendGroup.append("text")
+        .attr("x", legendWidth)
+        .attr("y", legendHeight + 20)
+        .attr("text-anchor", "end")
+        .text(Math.round(linearDomain[1]).toLocaleString())
+        .style("font-size", "12px");
+
+    legendGroup.append("text")
+        .attr("x", legendWidth / 2)
+        .attr("y", -10)
+        .attr("text-anchor", "middle")
+        .style("font-size", "14px")
+        .style("font-weight", "bold")
+        .text("Total Deaths");
+    
     node.on("mouseover", function(event, d) {
-        // Bring to front
         d3.select(this).raise();
         
-        // Visual feedback
         d3.select(this).select("circle")
             .attr("stroke-width", 2)
             .attr("stroke", "white");
         
-        // Position and show tooltip
         tooltip.transition()
             .duration(200)
             .style("opacity", 0.9);
@@ -665,14 +718,12 @@ function createVis2(data, year) {
         .style("top", (event.pageY - 28) + "px");
     })
     .on("mouseout", function() {
-        // Only remove highlight if not clicked (pinned)
         if (!d3.select(this).classed("pinned")) {
             d3.select(this).select("circle")
                 .attr("stroke-width", 1)
                 .attr("stroke", "black");
         }
         
-        // Hide tooltip if not pinned
         if (!d3.select(this).classed("pinned")) {
             tooltip.transition()
                 .duration(500)
@@ -680,41 +731,33 @@ function createVis2(data, year) {
         }
     })
     .on("mousemove", function(event) {
-        // Update tooltip position
         tooltip.style("left", (event.pageX + 15) + "px")
                .style("top", (event.pageY - 28) + "px");
     });
 
-    // Click handler (now with pinning functionality)
     node.on("click", function(event, d) {
-        // Toggle pinned state
         const isPinned = d3.select(this).classed("pinned");
         d3.select(this).classed("pinned", !isPinned);
         
-        // Update all circles
         node.select("circle")
             .attr("stroke-width", 1)
             .attr("stroke", "black");
         
-        // Highlight clicked bubble if pinned
         if (!isPinned) {
             d3.select(this).select("circle")
                 .attr("stroke-width", 3)
                 .attr("stroke", "yellow");
             
-            // Keep tooltip visible for pinned items
             tooltip.style("opacity", 0.9);
         } else {
-            // Hide tooltip when unpinning
             tooltip.transition()
                 .duration(500)
                 .style("opacity", 0);
         }
         
-        event.stopPropagation(); // Prevent zoom on click
+        event.stopPropagation(); 
     });
 
-    // Click on SVG background to unpin all
     svg.on("click", function() {
         node.classed("pinned", false)
             .select("circle")

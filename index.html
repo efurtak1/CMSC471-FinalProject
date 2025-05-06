@@ -4,23 +4,27 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Fatal Trends of America</title>
-    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/styles.css">   
 </head>
 <body>
     <div class="container"> <!-- Centers content and sets max width -->
-        <h1>Fatal trends of America</h1>
-        <p>Elizabeth Furtak, William Yang, Peyton Chang.</p>
+        <h1 style="color: rgb(174, 11, 11);">Fatal Trends of America</h1>
+        <p>By: Elizabeth Furtak, William Yang, and Peyton Chang.</p>
         <hr>
-        <p>a brief description of your visualization: This is a simple visualization of a deaths in the US. GOING TO ADD MORE ABOUT THE DATASET AND STUFF ABT WEBPAGE</p>
+        <p>This webpage features an interactive visualization of deaths in the U.S., displaying trends by cause and
+             geographic region. The main view includes a heatmap that highlights mortality rates across states, allowing 
+             users to explore variations over time using a year slider. Additionally, an interactive graph with bouncing 
+             balls represents different causes of death, where each ball's movement and size correspond 
+            to mortality data. Users can filter by year, cause, and region to uncover patterns and trends in the dataset.</p>
         <hr>
-        <h2> Mortality Trends over time Geographically</h2>
+        <h2> Mortality Trends Over Time Geographically</h2>
         <p>This visualization shows how mortality rates have changed across different age groups.</p>
         
         
         <div id="vis1" class="vis"></div>
         <hr>
         
-        <h2>Fun Distribution</h2>
+        <h2>Interactive Mortality Trends Over Time</h2>
         <p>This visualization displays mortality rates in a fun way.</p>
         <div id="vis2">
             <div id="slider-container"></div>
@@ -29,7 +33,20 @@
         
         <hr>
         <h2>Additional Information:</h2>
-        <p>breakdown of how the work was split among group members and dataset url and source code stuff. ackoledgement of appropriate sources</p>
+        <p>
+            This group project was an engaging and collaborative effort that required significant dedication. 
+            It began with an initial brainstorming session where we selected our two main data 
+            visualizations: a geographical heatmap and an interactive bubble plot (inspired by Tableau’s Bubble Plot). 
+            Elizabeth led the development of the geographical visualization, including the slider and legend, with 
+            occasional assistance from Peyton.
+             Meanwhile, William implemented the bubble plot with Elizabeth’s support, along with its slider and legend.  
+            Acknowledgement of Appropriate Sources:
+            <ul>
+                <li>1. Interactive Bubble Chart source was from Observable: https://observablehq.com/@unkleho/covid-19-bubble-chart-with-d3-render  </li>
+                <li>2. Some ChatGPT was used to help with understanding how to make the Bubble Chart to work.</li>
+                <li>3. The map visualization was taken from CMSC471 Lab 11.</li>
+            </ul>
+        </p>
     </div>
         <div id="tooltip" style="display:none"></div>   
     </div>

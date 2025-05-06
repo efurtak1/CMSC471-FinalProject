@@ -18,14 +18,23 @@
             to mortality data. Users can filter by year, cause, and region to uncover patterns and trends in the dataset.</p>
         <hr>
         <h2> Mortality Trends Over Time Geographically</h2>
-        <p>This visualization shows how mortality rates have changed across different age groups.</p>
+        <p>This visualization shows how mortality rates have changed across the United States. The goal of this visualization 
+            is to detect if any particular illness is more prevalent in certain geographical areas or in certain years. First, we implemented a dropdown and slider
+            to filter data across cause of death and year. We also employed a red color gradient to differentiate the number of deaths in each state. Lastly, we added a mouseover feature 
+            to showcase more specific details such as death rate per state. To utilize this visualization, begin by choosing a cause of death from the dropdown as well as a year, and begin
+            observing.
+        </p>
         
         
         <div id="vis1" class="vis"></div>
         <hr>
         
         <h2>Interactive Mortality Trends Over Time</h2>
-        <p>This visualization displays mortality rates in a fun way.</p>
+        <p>This visualization displays mortality amount through a packed bubble plot. The goal of this visualization is to reveal the leading causes of death in total, without the lens 
+            of geography. The packed bubble plot separates each cause of death into an individual bubble with the size correlating to the number of deaths.
+            Similar to the geographical visualization, there is the ability to filter the data by year with the slider and hovering on a bubble showcases more detail. Another exciting feature this visualization supports is
+            the ability to move the bubbles around. Just move the bubbles around and watch them come back.
+        </p>
         <div id="vis2">
             <div id="slider-container"></div>
             <svg id="bubble-chart"></svg>

@@ -3,7 +3,7 @@ console.log('D3 Version:', d3.version);
 const width = 975;
 const height = 610;
 
-// Global variables
+// global variables
 let allMortalityData = [];
 let currentYear = 2017;
 let currentCause = "All causes";
@@ -13,30 +13,30 @@ let dataByYear = {};
 let states;
 let selectedState = null;
 
-// Asynchronous initialization
+// asynch initialization
 async function init() {
     try {
-        // Load geographic data
+        // loading geographic data
         const us = await d3.json("./data/states-albers-10m.json");
         usMap = us;
         
-        // Load mortality data
+        // loading mortality data
         allMortalityData = await d3.json("./data/mortality_data.json");
 
         console.log('Data loaded successfully');
 
-        // Organize mortality data by year and state
+        // organizing mortality data by year and state
         allMortalityData.forEach(d => {
             if (!dataByYear[d.Year]) {
                 dataByYear[d.Year] = {};
             }
-            dataByYear[d.Year][d.State] = d; // Store the most recent entry per state/year
+            dataByYear[d.Year][d.State] = d; // store the most recent entry per state/year
         });
 
-        // Create controls first
+        // create controls first
         createYearSlider("#vis1");
-        createCauseDropdown(); // This sets currentCause to first available option
-        // Then create visualization with default year and cause
+        createCauseDropdown(); // this sets currentCause to first available option
+        // then create visualization with default year and cause
         createVis1(us, filterDataByYearAndCause(currentYear, currentCause));
 
         d3.json("./data/mortality_data.json").then(data => {
@@ -160,18 +160,18 @@ function createYearSlider(vis) {
         .attr("class", "slider-handle");
 }
 function createCauseDropdown() {
-    // Get unique causes from data
+    // get unique causes from data
     const causes = [...new Set(allMortalityData.map(d => d["Cause Name"]))].sort();
     
-    // Set default cause
+    //set default cause
     currentCause = causes[0];
     
-    // Create container for controls
+    // create container for controls
     const controlsContainer = d3.select("#vis1")
         .append("div")
         .attr("class", "controls-container");
     
-    // Left-aligned dropdown container
+    // left-aligned dropdown container
     const dropdown = controlsContainer.append("div")
         .attr("class", "dropdown-container");
         
@@ -194,14 +194,14 @@ function createCauseDropdown() {
         .attr("value", d => d)
         .text(d => d);
     
-    // Right-aligned legend wrapper
+    // right-aligned legend wrapper
     const legendWrapper = controlsContainer.append("div")
         .attr("class", "legend-wrapper");
     
-    // Add color legend
+    // add color legend
     createColorLegend(legendWrapper);
     
-    // Trigger initial update
+    // trigger initial update
     updateDataForCause(currentCause);
 }
 
@@ -209,18 +209,18 @@ function createColorLegend(container) {
     const legendWidth = 200;
     const legendHeight = 20;
     
-    // Add title above the legend
+    // add title above the legend
     container.append("div")
         .attr("class", "legend-title")
         .text("Death Rates per 100,000");
     
-    // Create SVG for the legend
+    // create SVG for the legend
     const svg = container.append("svg")
         .attr("width", legendWidth)
         .attr("height", legendHeight)
         .attr("class", "color-legend");
     
-    // Add gradient definition
+    // add gradient definition
     const defs = svg.append("defs");
     const gradient = defs.append("linearGradient")
         .attr("id", "legend-gradient")
@@ -237,17 +237,17 @@ function createColorLegend(container) {
         .attr("offset", "100%")
         .attr("stop-color", "#b71c1c");
     
-    // Add gradient rectangle
+    // add gradient rectangle
     svg.append("rect")
         .attr("width", legendWidth)
         .attr("height", legendHeight)
         .style("fill", "url(#legend-gradient)");
     
-    // Add labels container
+    // add labels container
     const labels = container.append("div")
         .attr("class", "legend-labels");
     
-    // Add min/max labels
+    // add min/max labels
     labels.append("span")
         .attr("class", "legend-label")
         .attr("id", "legend-min")
@@ -259,19 +259,19 @@ function createColorLegend(container) {
         .text("0");
 }
 function updateColorLegend() {
-    // Get current data to determine min/max values
+    // get current data to determine min/max values
     const currentData = filterDataByYearAndCause(currentYear, currentCause);
     const allRates = currentData.map(d => d["Age-adjusted Death Rate"]).filter(rate => rate !== undefined);
     const minRate = allRates.length > 0 ? Math.min(...allRates) : 0;
     const maxRate = allRates.length > 0 ? Math.max(...allRates) : 1;
     
-    // Update legend labels with formatted numbers
+    // update legend labels with formatted numbers
     d3.select("#legend-min").text(minRate.toFixed(1));
     d3.select("#legend-max").text(maxRate.toFixed(1));
 }
 
 function updateDataForCause(cause) {
-    // Reorganize data for the selected cause
+    // reorganize data for the selected cause
     const newDataByYear = {};
     
     allMortalityData.forEach(d => {
@@ -283,10 +283,10 @@ function updateDataForCause(cause) {
         }
     });
     
-    // Update the global dataByYear reference
+    // update the global dataByYear reference
     dataByYear = newDataByYear;
     
-    // Reattach data to states
+    // reattach data to states
     const states_topo = topojson.feature(usMap, usMap.objects.states);
     states_topo.features.forEach(feature => {
         const stateName = feature.properties.name;
@@ -299,7 +299,7 @@ function updateDataForCause(cause) {
         });
     });
     
-    // Recalculate color scale based on current data
+    // recalculate color scale based on current data
     const currentData = filterDataByYearAndCause(currentYear, cause);
     const allRates = currentData.map(d => d["Age-adjusted Death Rate"]).filter(rate => rate !== undefined);
     const minRate = allRates.length > 0 ? Math.min(...allRates) : 0;
@@ -309,16 +309,16 @@ function updateDataForCause(cause) {
         .domain([minRate, maxRate])
         .range(["#ffebee", "#b71c1c"]);
     
-    // Update the visualization
+    // update the visualization
     updateMapForYear(currentYear);
     updateColorLegend(); // Add this line
 }
 
 function updateMapForYear(year) {
-    // Get data for current year and cause
+    // get data for current year and cause
     const yearData = filterDataByYearAndCause(year, currentCause);
     
-    // Update color scale based on current data
+    // update color scale based on current data
     const allRates = yearData.map(d => d["Age-adjusted Death Rate"]).filter(rate => rate !== undefined);
     const minRate = allRates.length > 0 ? Math.min(...allRates) : 0;
     const maxRate = allRates.length > 0 ? Math.max(...allRates) : 1;
@@ -327,7 +327,7 @@ function updateMapForYear(year) {
         .domain([minRate, maxRate])
         .range(["#ffebee", "#b71c1c"]);
     
-    // Update map colors
+    // update map colors
     if (states) {
         states.transition().duration(500).attr("fill", d => {
             const stateData = d.properties.state_info?.[year];
@@ -335,7 +335,7 @@ function updateMapForYear(year) {
         });
     }
 
-    // Update selected state info if one is selected
+    // update selected state info if one is selected
     if (selectedState) {
         const selectedData = d3.select(selectedState).datum().properties.state_info?.[year];
         if (selectedData) {
@@ -351,7 +351,7 @@ function updateMapForYear(year) {
 function createVis1(us, mortality_data) {
     const states_topo = topojson.feature(us, us.objects.states);
 
-    // Attach data to states
+    // attach data to states
     states_topo.features.forEach(feature => {
         const stateName = feature.properties.name;
         feature.properties.state_info = {};
@@ -363,7 +363,7 @@ function createVis1(us, mortality_data) {
         });
     });
 
-    // Calculate color scale based on current data
+    // calculate color scale based on current data
     const allRates = mortality_data.map(d => d["Age-adjusted Death Rate"]).filter(rate => rate !== undefined);
     const minRate = allRates.length > 0 ? Math.min(...allRates) : 0;
     const maxRate = allRates.length > 0 ? Math.max(...allRates) : 1;
@@ -411,7 +411,7 @@ function createMap(us, states_topo) {
         .on("mouseover", function(event, d) {
             d3.select(this).attr("stroke", "black").attr("stroke-width", 1.5);
         
-            const [x, y] = d3.pointer(event, document.body);
+            const [x, y] = d3.pointer(event, svg.node());
         
             const stateData = d.properties.state_info?.[currentYear];
         
@@ -429,8 +429,8 @@ function createMap(us, states_topo) {
                     Cause: ${currentCause}<br/>
                     No data available
                 `)
-                .style("left", `${x + 10}px`)
-                .style("top", `${y + 10}px`)
+                .style("left", `${event.pageX + 10}px`)
+                .style("top", `${event.pageY + 10}px`)
                 .style("opacity", 1);
         })
         .on("mouseout", function() {
@@ -438,10 +438,10 @@ function createMap(us, states_topo) {
             d3.select("#tooltip").style("opacity", 0);
         })
         .on("mousemove", function(event) {
-            const [x, y] = d3.pointer(event, document.body);
+            const [x, y] = d3.pointer(event, svg.node());
             d3.select("#tooltip")
-                .style("left", `${x + 10}px`)
-                .style("top", `${y + 10}px`);
+                .style("left", `${event.pageX + 10}px`)
+                .style("top", `${event.pageY + 10}px`);
         });
 
     g.append("path")
@@ -508,19 +508,19 @@ function createVis2(data, year) {
 
     const filtered = data.filter(d => +d.Year === year);
     console.log(year)
-    // Group by "Cause Name" and sum Deaths across all states
+    // group by "Cause Name" and sum Deaths across all states
     const grouped = d3.rollups(
         filtered,
         v => d3.sum(v, d => +d.Deaths),
         d => d["Cause Name"]
     );
   
-    // Convert to hierarchical format for D3 pack
+    // convert to hierarchical format for D3 pack
     const hierarchicalData = {
         children: grouped.map(([name, value]) => ({ name, value }))
     };
   
-    // Create packed bubble layout with more padding
+    // create packed bubble layout with more padding
     const pack = data => d3.pack()
         .size([width, height * 0.8])
         .padding(5)(
@@ -529,7 +529,7 @@ function createVis2(data, year) {
         );
     const root = pack(hierarchicalData);
 
-    // Color scale
+    // color scale
     const color = d3.scaleSequential()
         .domain(d3.extent(grouped, d => Math.log10(d[1] + 1))) 
         .interpolator(d3.interpolateReds);
@@ -543,7 +543,7 @@ function createVis2(data, year) {
 
     const g = svg.append("g");
   
-    // Add zoom behavior
+    // add zoom behavior
     const zoom = d3.zoom()
         .scaleExtent([0.5, 8])
         .on("zoom", (event) => {
@@ -558,18 +558,18 @@ function createVis2(data, year) {
 
     svg.call(zoom.transform, initialTransform);
     
-    // // Create a group for all bubbles
+    // create a group for all bubbles
     // const g = svg.append("g");
 
     const initialY = height * 0.5;
 
     root.leaves().forEach((d, i) => {
         d.x = width * (0.2 + 0.6 * i / root.leaves().length);
-        d.y = initialY + (Math.random() - 0.5) * 30;  // Add slight jitter, keep it higher
-        d.vy = 0;  // No downward velocity, so they don't fall initially
+        d.y = initialY + (Math.random() - 0.5) * 30;  // add slight jitter, keep it higher
+        d.vy = 0;  // no downward velocity, so they don't fall initially
     });
   
-    // Add force simulation with adjusted parameters
+    // add force simulation with adjusted parameters
     const simulation = d3.forceSimulation(root.leaves())
         .force("charge", d3.forceManyBody().strength(1))
         .force("x", d3.forceX(width / 2).strength(0.02))
@@ -614,7 +614,7 @@ function createVis2(data, year) {
         .duration(800)
         .attr("opacity", 1);
 
-    // Create a dedicated tooltip div if it doesn't exist
+    // create a dedicated tooltip div if it doesn't exist
     let tooltip = d3.select("#bubble-tooltip");
     if (tooltip.empty()) {
         tooltip = d3.select("body").append("div")
@@ -801,7 +801,7 @@ function createVis2(data, year) {
         node.attr("transform", d => `translate(${d.x},${d.y})`);
     }
 
-    // Gradual gravity increase
+    // gradual gravity increase
     setTimeout(() => {
         simulation.force("y", d3.forceY(height * 0.85).strength(0.2));
         simulation.alpha(0.5).restart();
